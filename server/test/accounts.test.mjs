@@ -229,3 +229,24 @@ test("an older server's data moves into families: each account its own, named af
   assert.equal(db.prepare('SELECT version FROM schema_version').get().version, STEPS.length);
   db.close();
 });
+
+test("a profile's avatar: its look saved, checked, and sent with the profiles", async () => {
+  const { s, call } = await fresh();
+  try {
+    const me = await call('POST', '/api/signup', grownUp('a@example.com'));
+    const LOOK = { skin: '#f3c393', hair: 'ponytail', hairColor: '#5a3825', eyes: 'sparkle', mouth: 'grin', color: '#ff5d8f', outfit: 'stars', extra: 'bow' };
+    const kid = await call('POST', '/api/profiles', { name: 'Ellie', avatar: 'star', look: LOOK }, me.token);
+    assert.deepEqual(kid.look, LOOK);
+    assert.equal((await call('PATCH', `/api/profiles/${kid.id}`, { look: { ...LOOK, hair: 'mohawk' } }, me.token)).error, 'bad_look', 'only the choices');
+    assert.equal((await call('PATCH', `/api/profiles/${kid.id}`, { look: { ...LOOK, color: 'url(x)' } }, me.token)).error, 'bad_look');
+    const tinted = await call('PATCH', `/api/profiles/${kid.id}`, { look: { ...LOOK, color: '#123abc', sneaky: 'x' } }, me.token);
+    assert.equal(tinted.look.color, '#123abc', 'any colour code'); assert.equal(tinted.look.sneaky, undefined, 'nothing else kept');
+    const all = (await call('GET', '/api/me', null, me.token)).profiles;
+    assert.equal(all.find(p => p.id === kid.id).look.hair, 'ponytail');
+    assert.equal(all.find(p => p.id !== kid.id).look, null, 'no avatar made yet');
+    /* the app's choices and the server's are the same */
+    const app = await import('../../app/src/ui/avatar-art.js');
+    const { PARTS } = await import('../src/looks.js');
+    assert.deepEqual(app.PARTS, PARTS);
+  } finally { await s.close(); }
+});

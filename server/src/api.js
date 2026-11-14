@@ -21,6 +21,7 @@
 import { Fail, isLocal } from './http.js';
 import { now } from './db.js';
 import { history } from './history.js';
+import { look } from './looks.js';
 import { hashPassword, checkPassword, burnTime, newToken, hashToken, newId, newInviteCode, tidyInvite } from './secure.js';
 
 export const LIMITS = {
@@ -96,7 +97,8 @@ export function api(db, info, extra = () => [], manageKey = null){
   const accountOut = (a) => ({ id: a.id, email: a.email, role: a.role, createdAt: a.created_at });
   const householdOf = (a) => { const h = q('SELECT id, name FROM households WHERE id = ?').get(a.household_id); return h ? { ...h } : null; };
   /* the family's profiles: everyone's kids (and grown-ups) in the household */
-  const profilesOf = (a) => q('SELECT p.id, p.name, p.avatar, p.account_id AS accountId FROM profiles p JOIN accounts x ON x.id = p.account_id WHERE x.household_id = ? ORDER BY p.created_at, p.rowid').all(a.household_id).map(p => ({ ...p }));
+  const lookOf = (t) => { try { return t ? JSON.parse(t) : null; } catch { return null; } };
+  const profilesOf = (a) => q('SELECT p.id, p.name, p.avatar, p.look, p.account_id AS accountId FROM profiles p JOIN accounts x ON x.id = p.account_id WHERE x.household_id = ? ORDER BY p.created_at, p.rowid').all(a.household_id).map(p => ({ ...p, look: lookOf(p.look) }));
   const ownProfiles = (accountId) => q('SELECT COUNT(*) AS n FROM profiles WHERE account_id = ?').get(accountId).n;
   /* a profile in the asker's family, or nothing */
   const familyProfile = (a, id) => q('SELECT p.* FROM profiles p JOIN accounts x ON x.id = p.account_id WHERE p.id = ? AND x.household_id = ?').get(id, a.household_id);
@@ -187,9 +189,9 @@ export function api(db, info, extra = () => [], manageKey = null){
     ['POST', '/api/profiles', ({ headers, body }) => {
       const a = who(headers);
       if (profilesOf(a).length >= LIMITS.profiles) throw new Fail(400, 'full', `A family can have up to ${LIMITS.profiles} profiles.`);
-      const p = { id: newId(), name: name(body.name), avatar: avatar(body.avatar) };
-      q('INSERT INTO profiles (id, account_id, name, avatar, created_at) VALUES (?, ?, ?, ?, ?)').run(p.id, a.id, p.name, p.avatar, now());
-      return [201, p];
+      const p = { id: newId(), name: name(body.name), avatar: avatar(body.avatar), look: body.look === undefined ? null : look(body.look) };
+      q('INSERT INTO profiles (id, account_id, name, avatar, look, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(p.id, a.id, p.name, p.avatar, p.look && JSON.stringify(p.look), now());
+      return [201, { ...p, accountId: a.id }];
     }],
     ['PATCH', '/api/profiles/:id', ({ headers, params, body }) => {
       const a = who(headers);
@@ -197,8 +199,9 @@ export function api(db, info, extra = () => [], manageKey = null){
       if (!p) throw new Fail(404, 'no_profile', 'No such profile.');
       const n = body.name === undefined ? p.name : name(body.name);
       const v = body.avatar === undefined ? p.avatar : avatar(body.avatar);
-      q('UPDATE profiles SET name = ?, avatar = ? WHERE id = ?').run(n, v, p.id);
-      return { id: p.id, name: n, avatar: v };
+      const l = body.look === undefined ? lookOf(p.look) : look(body.look);
+      q('UPDATE profiles SET name = ?, avatar = ?, look = ? WHERE id = ?').run(n, v, l && JSON.stringify(l), p.id);
+      return { id: p.id, name: n, avatar: v, look: l, accountId: p.account_id };
     }],
     ['DELETE', '/api/profiles/:id', ({ headers, params }) => {
       const a = who(headers);

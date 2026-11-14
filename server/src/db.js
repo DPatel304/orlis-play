@@ -97,6 +97,10 @@ export const STEPS = [
     version TEXT,
     note TEXT
   );
+  `,
+  /* 6: each profile's avatar - its look, from the avatar maker (looks.js) */
+  `
+  ALTER TABLE profiles ADD COLUMN look TEXT;
   `
 ];
 
