@@ -1,0 +1,124 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>House style B - mockups</title>
+<style>
+  body{ margin:0; background:#e9ebf2; }
+  .frame{ width:1600px; height:900px; position:relative; overflow:hidden; margin:0 0 24px; }
+  .frame canvas{ position:absolute; inset:0; }
+</style></head>
+<body>
+<div class="frame" id="run"><canvas width="1600" height="900"></canvas></div>
+<div class="frame" id="crash"><canvas width="1600" height="900"></canvas></div>
+<div class="frame" id="pop"><canvas width="1600" height="900"></canvas></div>
+<script type="module">
+/* Orlis's house style (direction B, refined): a quiet flat world - a few
+   muted colours per game, no outlines, no gradients, one light (shadows
+   fall to the right), lots of room - and the kids the only things in full
+   colour. The fun is in small mischief: a critter peeking, a bird on the
+   ship, footprints far too big. */
+import { body, setStyle, PARTS } from '/src/ui/avatar-art.js';
+
+const W = 1600, H = 900, T = 1.3, PI = Math.PI;
+const KIDS = [
+  { skin: PARTS.skin[1], hair: 'ponytail', hairColor: PARTS.hairColor[1], eyes: 'sparkle', mouth: 'grin', color: '#ff5d8f', outfit: 'stars', extra: 'bow' },
+  { skin: PARTS.skin[3], hair: 'curly', hairColor: PARTS.hairColor[0], eyes: 'dots', mouth: 'smile', color: '#3da9ff', outfit: 'stripes', extra: 'cap' },
+  { skin: PARTS.skin[5], hair: 'spiky', hairColor: PARTS.hairColor[0], eyes: 'wink', mouth: 'grin', color: '#a855f7', outfit: 'hoodie', extra: 'headphones' }
+];
+/* the world's palette (one per game; these are the outdoors one) */
+const P = { paper: '#eee9db', far: '#c9d3b6', hedge: '#8aa577', grass: '#a9bf8e', shade: '#93ab7c', tree: '#6f8f61', trunk: '#8a7a64', path: '#ddd2bb', pathShade: '#cfc3a9', ink: '#3b3a36', warm: '#d98a5b', cool: '#9db7c2', smoke: '#d7d2c6', white: '#f6f3ec' };
+const ctx = (id) => document.querySelector(`#${id} canvas`).getContext('2d');
+let seed = 5; const R = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const circle = (c, x, y, r) => { c.beginPath(); c.arc(x, y, r, 0, PI * 2); };
+const oval = (c, x, y, rx, ry, rot = 0) => { c.beginPath(); c.ellipse(x, y, rx, ry, rot, 0, PI * 2); };
+const poly = (c, pts) => { c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); };
+const fill = (c, col) => { c.fillStyle = col; c.fill(); };
+const kidStyle = () => setStyle({ outline: null, shade: 'flat', feature: '#2d2a26' });
+
+function hedge(c, y, r, col, step){ c.beginPath(); c.moveTo(0, y + r); for (let x = -r; x <= W + r; x += step) c.arc(x, y, r, PI, 0); c.lineTo(W, y + r * 2); c.lineTo(0, y + r * 2); fill(c, col); }
+function tree(c, x, y, r){ oval(c, x + r * .6, y + r * .15, r * 1.15, r * .32); fill(c, P.shade); c.fillStyle = P.trunk; c.fillRect(x - r * .09, y - r * .9, r * .18, r * .9); circle(c, x, y - r * 1.4, r); fill(c, P.tree); }
+function critter(c, x, y, s, look = 1){
+  /* a round little thing, peeking out of the hedge */
+  oval(c, x, y, 34 * s, 28 * s); fill(c, '#7b6f8f');
+  for (const d of [-1, 1]){ circle(c, x + d * 12 * s + look * 4 * s, y - 6 * s, 8 * s); fill(c, P.white); circle(c, x + d * 12 * s + look * 7 * s, y - 6 * s, 4 * s); fill(c, P.ink); }
+  for (const d of [-1, 1]){ poly(c, [[x + d * 14 * s, y - 24 * s], [x + d * 26 * s, y - 44 * s], [x + d * 30 * s, y - 20 * s]]); fill(c, '#7b6f8f'); }
+}
+function bird(c, x, y, s){ oval(c, x, y, 22 * s, 16 * s); fill(c, P.ink); circle(c, x + 16 * s, y - 12 * s, 11 * s); fill(c, P.ink); poly(c, [[x + 25 * s, y - 14 * s], [x + 38 * s, y - 10 * s], [x + 25 * s, y - 7 * s]]); fill(c, P.warm); c.strokeStyle = P.ink; c.lineWidth = 2 * s; c.beginPath(); c.moveTo(x - 4 * s, y + 14 * s); c.lineTo(x - 4 * s, y + 24 * s); c.moveTo(x + 6 * s, y + 14 * s); c.lineTo(x + 6 * s, y + 24 * s); c.stroke(); }
+function footprint(c, x, y, s, rot = 0){ c.save(); c.translate(x, y); c.rotate(rot); oval(c, 0, 0, 40 * s, 22 * s); fill(c, P.pathShade); for (const k of [-1, 0, 1]){ oval(c, k * 26 * s, -30 * s, 9 * s, 7 * s); fill(c, P.pathShade); } c.restore(); }
+/* the one bit of interface in the world: a flat card, the game's words */
+function card(c, x, y, who, text){
+  c.save(); c.font = '600 28px Inter, Segoe UI, sans-serif'; const w = c.measureText(text).width + 130;
+  c.beginPath(); c.roundRect(x, y, w, 84, 42); fill(c, P.white);
+  circle(c, x + 42, y + 42, 28); fill(c, P.cool); circle(c, x + 42, y + 36, 11); fill(c, P.white); c.beginPath(); c.arc(x + 42, y + 64, 18, PI, 0); fill(c, P.white);
+  c.fillStyle = '#8a8478'; c.font = '600 18px Inter, Segoe UI, sans-serif'; c.fillText(who.toUpperCase(), x + 84, y + 34);
+  c.fillStyle = P.ink; c.font = '600 28px Inter, Segoe UI, sans-serif'; c.fillText(text, x + 84, y + 66); c.restore();
+}
+function label(c, text){ c.save(); c.font = '600 24px Inter, sans-serif'; const w = c.measureText(text).width + 40; c.beginPath(); c.roundRect(28, H - 72, w, 46, 23); fill(c, 'rgba(59,58,54,.75)'); c.fillStyle = '#fff'; c.fillText(text, 48, H - 41); c.restore(); }
+
+/* LKP: running the trail, from behind */
+function run(c){
+  c.fillStyle = P.paper; c.fillRect(0, 0, W, H);
+  circle(c, 1290, 150, 54); fill(c, '#dcdfcf'); oval(c, 1290, 150, 96, 17, -.25); c.lineWidth = 7; c.strokeStyle = '#e6c9a8'; c.stroke();
+  hedge(c, 330, 90, P.far, 150); hedge(c, 380, 64, P.hedge, 118);
+  c.fillStyle = P.grass; c.fillRect(0, 440, W, H - 440);
+  /* the path, narrowing to the hills */
+  poly(c, [[740, 440], [860, 440], [1240, H], [360, H]]); fill(c, P.path);
+  /* the giant's footprints, far too big, going on ahead */
+  footprint(c, 760, 520, .9, -.1); footprint(c, 860, 600, 1.15, .1); footprint(c, 720, 700, 1.4, -.1);
+  /* the ship, small, left behind; its smoke */
+  c.save(); c.translate(260, 470); c.rotate(-.12); c.beginPath(); c.roundRect(-110, -32, 210, 64, 32); fill(c, P.white); c.fillStyle = P.warm; c.fillRect(-60, -32, 18, 64); c.restore();
+  for (const [x, y, r] of [[160, 440, 16], [140, 400, 22], [128, 345, 30]]){ circle(c, x, y, r); fill(c, P.smoke); }
+  for (const [x, y, r] of [[120, 610, 64], [1450, 620, 80], [1320, 520, 46], [470, 500, 38]]) tree(c, x, y, r);
+  bird(c, 1310, 452, .9);
+  critter(c, 1040, 448, .8, -1);
+  kidStyle();
+  KIDS.forEach((k, i) => body(c, [620, 800, 980][i], 880, 270, k, T + i, i === 1 ? 'cheer' : 'stand', { costume: 'space', back: true }));
+  card(c, 40, 40, 'Nova', 'Follow the footprints!');
+  label(c, 'House style · LKP running');
+}
+/* LKP: the crash site */
+function crash(c){
+  c.fillStyle = P.paper; c.fillRect(0, 0, W, H);
+  circle(c, 1280, 170, 58); fill(c, '#dcdfcf'); oval(c, 1280, 170, 100, 18, -.25); c.lineWidth = 8; c.strokeStyle = '#e6c9a8'; c.stroke();
+  hedge(c, 400, 70, P.far, 170); hedge(c, 440, 62, P.hedge, 120);
+  c.fillStyle = P.grass; c.fillRect(0, 470, W, H - 470);
+  critter(c, 560, 452, 1, 1);
+  tree(c, 160, 600, 70); tree(c, 1470, 640, 80); tree(c, 1340, 540, 50);
+  oval(c, 1080, 700, 300, 32); fill(c, P.shade);
+  c.save(); c.translate(1040, 610); c.rotate(-.12);
+  c.beginPath(); c.roundRect(-250, -75, 470, 150, 75); fill(c, P.white);
+  c.fillStyle = P.warm; c.fillRect(-140, -75, 40, 150);
+  circle(c, 40, -5, 28); fill(c, P.cool);
+  c.restore();
+  bird(c, 1150, 520, 1.1);
+  for (const [x, y, r] of [[800, 540, 30], [770, 470, 40], [750, 380, 52]]){ circle(c, x, y, r); fill(c, P.smoke); }
+  kidStyle();
+  KIDS.forEach((k, i) => body(c, [300, 470, 640][i], 760, 250, k, T + i, ['wave', 'stand', 'cheer'][i], { costume: 'space' }));
+  card(c, 40, 40, 'Nova', 'Is everyone OK? Wave if you’re OK!');
+  label(c, 'House style · LKP crash site');
+}
+/* Pop Party */
+function pop(c){
+  c.fillStyle = P.paper; c.fillRect(0, 0, W, H);
+  hedge(c, 640, 82, P.hedge, 160);
+  c.fillStyle = P.grass; c.fillRect(0, 700, W, H - 700);
+  /* a cat on the hedge, watching the balloons */
+  oval(c, 1430, 568, 46, 30); fill(c, P.ink); circle(c, 1470, 540, 24); fill(c, P.ink);
+  for (const d of [-1, 1]) { poly(c, [[1470 + d * 8, 524], [1470 + d * 22, 506], [1470 + d * 22, 532]]); fill(c, P.ink); }
+  circle(c, 1478, 538, 4); fill(c, '#e6c96a'); circle(c, 1464, 538, 4); fill(c, '#e6c96a');
+  c.strokeStyle = P.ink; c.lineWidth = 8; c.lineCap = 'round'; c.beginPath(); c.moveTo(1386, 570); c.quadraticCurveTo(1360, 620, 1390, 640); c.stroke();
+  const bal = (x, y, r, col) => { c.strokeStyle = '#8a8478'; c.lineWidth = 2; c.beginPath(); c.moveTo(x, y + r * 1.15); c.quadraticCurveTo(x + 14, y + r * 2.2, x - 6, y + r * 3.2); c.stroke(); oval(c, x, y, r, r * 1.15); fill(c, col); poly(c, [[x - 7, y + r * 1.22], [x + 7, y + r * 1.22], [x, y + r * 1.1]]); fill(c, col); };
+  bal(600, 230, 48, '#e6b85c'); bal(1040, 190, 54, '#7fb0a8'); bal(1270, 330, 42, '#d98a8a'); bal(300, 300, 40, '#b7a6cf');
+  /* a balloon just popped by the pink kid: bits in her colour */
+  for (let i = 0; i < 12; i++){ const a = i / 12 * PI * 2, d = 50 + R() * 26; c.save(); c.translate(560 + Math.cos(a) * d, 360 + Math.sin(a) * d); c.rotate(a); c.fillStyle = KIDS[0].color; c.fillRect(-10, -4, 20, 8); c.restore(); }
+  kidStyle();
+  const xs = [440, 800, 1160], poses = ['cheer', 'reach', 'cheer'], u = 380 / 300;
+  KIDS.forEach((k, i) => body(c, xs[i], 860, 380, k, T + i, poses[i]));
+  const HANDS = { cheer: [[-92, -290], [92, -290]], reach: [[-66, -305], [66, -305]] };
+  KIDS.forEach((k, i) => { for (const [hx, hy] of HANDS[poses[i]]){ circle(c, xs[i] + hx * u, 860 + hy * u, 26); c.lineWidth = 6; c.strokeStyle = P.white; c.stroke(); } });
+  /* the scores: a flat chip each, in their colour */
+  KIDS.forEach((k, i) => { const x = 560 + i * 170; c.beginPath(); c.roundRect(x, 30, 150, 64, 32); fill(c, P.white); circle(c, x + 32, 62, 20); fill(c, k.color); c.fillStyle = P.ink; c.font = '700 32px Inter, sans-serif'; c.fillText(String([12, 9, 14][i]), x + 66, 74); });
+  label(c, 'House style · Pop Party');
+}
+run(ctx('run')); crash(ctx('crash')); pop(ctx('pop'));
+document.body.dataset.ready = '1';
+</script>
+</body></html>

@@ -1,0 +1,258 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Three directions - mockups</title>
+<style>
+  body{ margin:0; background:#e9ebf2; }
+  .frame{ width:1600px; height:900px; position:relative; overflow:hidden; margin:0 0 24px; }
+  .frame canvas{ position:absolute; inset:0; }
+</style></head>
+<body>
+<div class="frame" id="a-crash"><canvas width="1600" height="900"></canvas></div>
+<div class="frame" id="a-pop"><canvas width="1600" height="900"></canvas></div>
+<div class="frame" id="b-crash"><canvas width="1600" height="900"></canvas></div>
+<div class="frame" id="b-pop"><canvas width="1600" height="900"></canvas></div>
+<div class="frame" id="c-crash"><canvas width="1600" height="900"></canvas></div>
+<div class="frame" id="c-pop"><canvas width="1600" height="900"></canvas></div>
+<script type="module">
+/* The same three kids and the same two moments - LKP's crash site and a
+   Pop Party round - drawn three ways:
+     A  Playset: every game a toy set on a tabletop (flat worlds, one
+        material per set, the kids the only outlined things)
+     B  Flat and mischievous: flat muted shapes, no outlines, lots of space
+     C  Bold and silly: saturated, chunky, absurd scale */
+import { body, setStyle, PARTS } from '/src/ui/avatar-art.js';
+
+const W = 1600, H = 900, T = 1.3, PI = Math.PI;
+const KIDS = [
+  { skin: PARTS.skin[1], hair: 'ponytail', hairColor: PARTS.hairColor[1], eyes: 'sparkle', mouth: 'grin', color: '#ff5d8f', outfit: 'stars', extra: 'bow' },
+  { skin: PARTS.skin[3], hair: 'curly', hairColor: PARTS.hairColor[0], eyes: 'dots', mouth: 'smile', color: '#3da9ff', outfit: 'stripes', extra: 'cap' },
+  { skin: PARTS.skin[5], hair: 'spiky', hairColor: PARTS.hairColor[0], eyes: 'wink', mouth: 'grin', color: '#a855f7', outfit: 'hoodie', extra: 'headphones' }
+];
+const ctx = (id) => document.querySelector(`#${id} canvas`).getContext('2d');
+let seed = 11; const R = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+function mix(a, b, k){ const p = (h) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); const x = p(a), y = p(b); return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * k).toString(16).padStart(2, '0')).join(''); }
+const circle = (c, x, y, r) => { c.beginPath(); c.arc(x, y, r, 0, PI * 2); };
+const oval = (c, x, y, rx, ry, rot = 0) => { c.beginPath(); c.ellipse(x, y, rx, ry, rot, 0, PI * 2); };
+const poly = (c, pts) => { c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); };
+const fill = (c, col) => { c.fillStyle = col; c.fill(); };
+
+/* textures, made once: felt, wood grain, paper */
+function texture(c, kind){
+  const t = document.createElement('canvas'); t.width = t.height = 256; const g = t.getContext('2d'); let s = 7;
+  const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  if (kind === 'felt') for (let i = 0; i < 3800; i++){ const x = r() * 256, y = r() * 256, a = r() * PI, l = 2 + r() * 5; g.strokeStyle = r() < .5 ? 'rgba(255,255,255,.22)' : 'rgba(0,0,0,.14)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); }
+  if (kind === 'wood') for (let y = 0; y < 256; y += 3){ g.strokeStyle = `rgba(90,45,10,${.05 + r() * .1})`; g.lineWidth = 1 + r(); g.beginPath(); for (let x = 0; x <= 256; x += 8) g.lineTo(x, y + Math.sin(x / 40 + y) * 1.5); g.stroke(); }
+  if (kind === 'paper') for (let i = 0; i < 5000; i++){ g.fillStyle = r() < .5 ? 'rgba(255,255,255,.25)' : 'rgba(0,0,0,.06)'; g.fillRect(r() * 256, r() * 256, 1.5, 1.5); }
+  return c.createPattern(t, 'repeat');
+}
+/* the current path filled, then the texture over it */
+function stuff(c, col, tex, a = .9){ c.fillStyle = col; c.fill(); if (!tex) return; c.save(); c.clip(); c.globalAlpha = a; c.fillStyle = tex; c.fillRect(0, 0, W, H); c.restore(); }
+/* the current path's stitches */
+function stitch(c, col = 'rgba(255,255,255,.75)', w = 3){ c.save(); c.setLineDash([9, 8]); c.lineWidth = w; c.lineCap = 'round'; c.strokeStyle = col; c.stroke(); c.restore(); }
+const shadow = (c, x, y, rx, ry, a = .18) => { oval(c, x, y, rx, ry); fill(c, `rgba(60,30,10,${a})`); };
+function label(c, text){
+  c.save(); c.font = '600 26px Inter, Segoe UI, sans-serif'; const w = c.measureText(text).width + 40;
+  c.beginPath(); c.roundRect(28, H - 76, w, 50, 25); c.fillStyle = 'rgba(20,18,40,.72)'; c.fill();
+  c.fillStyle = '#fff'; c.fillText(text, 48, H - 42); c.restore();
+}
+const mitt = (c, x, y, col, r = 44) => { const g = c.createRadialGradient(x, y, 4, x, y, r); g.addColorStop(0, col); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; circle(c, x, y, r); c.fill(); };
+const HANDS = { cheer: [[-92, -290], [92, -290]], reach: [[-66, -305], [66, -305]], wave: [[-96, -278]], stand: [] };
+function kids(c, xs, base, h, poses, opts = {}, looks = KIDS, glow = false){
+  looks.forEach((k, i) => body(c, xs[i], base, h, k, T + i, poses[i], opts));
+  if (glow){ const u = h / 300; looks.forEach((k, i) => { for (const [hx, hy] of HANDS[poses[i]]) mitt(c, xs[i] + hx * u, base + hy * u, k.color); }); }
+}
+
+/* ================= A: Playset ================= */
+function playroom(c, mat){
+  const felt = texture(c, 'felt'), wood = texture(c, 'wood');
+  /* the playroom wall: soft, out of focus */
+  c.fillStyle = '#efe3d3'; c.fillRect(0, 0, W, H);
+  for (let x = 0; x < W; x += 80){ c.fillStyle = 'rgba(200,170,140,.12)'; c.fillRect(x, 0, 36, 520); }
+  const sun = c.createRadialGradient(1250, 140, 20, 1250, 140, 700); sun.addColorStop(0, 'rgba(255,248,225,.9)'); sun.addColorStop(1, 'rgba(255,248,225,0)'); c.fillStyle = sun; c.fillRect(0, 0, W, H);
+  /* the table */
+  c.beginPath(); c.rect(0, 520, W, H - 520); stuff(c, '#d29a63', wood, 1);
+  c.fillStyle = 'rgba(255,255,255,.18)'; c.fillRect(0, 520, W, 6);
+  /* the set's base: a felt mat with a thick edge */
+  c.beginPath(); c.roundRect(90, 500, W - 180, 360, 46); stuff(c, mix(mat, '#000000', .3), felt);
+  c.beginPath(); c.roundRect(90, 480, W - 180, 350, 46); stuff(c, mat, felt);
+  c.beginPath(); c.roundRect(108, 496, W - 216, 318, 34); stitch(c);
+  return { felt, wood };
+}
+function pegTree(c, x, y, s, col, tex, wood){
+  shadow(c, x + 6, y, 34 * s, 9 * s);
+  c.beginPath(); c.roundRect(x - 11 * s, y - 90 * s, 22 * s, 90 * s, 8 * s); stuff(c, '#c58a52', wood, 1);
+  circle(c, x, y - 120 * s, 56 * s); stuff(c, col, tex);
+  c.beginPath(); c.arc(x, y - 120 * s, 46 * s, PI * 1.1, PI * 1.6); stitch(c, 'rgba(255,255,255,.6)', 2.5);
+}
+function feltCloud(c, x, y, s, tex, hang = 0){
+  if (hang){ c.strokeStyle = 'rgba(80,60,40,.5)'; c.lineWidth = 2; c.beginPath(); c.moveTo(x, 0); c.lineTo(x, y - 40 * s); c.stroke(); }
+  c.beginPath(); for (const [dx, dy, r] of [[-60, 10, 42], [-10, -14, 56], [52, 6, 44], [0, 22, 46]]) { c.moveTo(x + dx * s + r * s, y + dy * s); c.arc(x + dx * s, y + dy * s, r * s, 0, PI * 2); }
+  stuff(c, '#ffffff', tex, .6);
+}
+function cottonPuff(c, x, y, s){
+  for (let i = 0; i < 9; i++){ const a = R() * PI * 2, d = R() * 26 * s; circle(c, x + Math.cos(a) * d, y + Math.sin(a) * d * .7, (18 + R() * 16) * s); c.fillStyle = `rgba(255,255,255,${.75 + R() * .25})`; c.fill(); }
+  for (let i = 0; i < 40; i++){ c.strokeStyle = 'rgba(200,200,210,.5)'; c.lineWidth = 1; const a = R() * PI * 2, d = R() * 40 * s; c.beginPath(); c.moveTo(x + Math.cos(a) * d, y + Math.sin(a) * d * .7); c.lineTo(x + Math.cos(a) * (d + 8), y + Math.sin(a) * (d + 8) * .7); c.stroke(); }
+}
+function crashA(c){
+  const { felt, wood } = playroom(c, '#86c27f');
+  /* the sky things hang from the ceiling, on strings: a felt planet, felt clouds */
+  c.strokeStyle = 'rgba(80,60,40,.5)'; c.lineWidth = 2; c.beginPath(); c.moveTo(1240, 0); c.lineTo(1240, 110); c.stroke();
+  circle(c, 1240, 180, 70); stuff(c, '#5fc0b8', felt);
+  oval(c, 1240, 180, 120, 26, -.25); c.lineWidth = 16; c.strokeStyle = '#f2a65a'; c.stroke();
+  c.beginPath(); c.arc(1240, 180, 58, PI * 1.1, PI * 1.6); stitch(c, 'rgba(255,255,255,.7)', 2.5);
+  feltCloud(c, 330, 150, 1, felt, 1); feltCloud(c, 760, 110, .7, felt, 1);
+  /* felt hills behind */
+  for (const [x, rx, ry, col] of [[300, 260, 150, '#5fa86d'], [620, 220, 110, '#77b878'], [1440, 240, 140, '#5fa86d']]){ c.beginPath(); c.ellipse(x, 500, rx, ry, 0, PI, PI * 2); c.closePath(); stuff(c, col, felt); c.beginPath(); c.ellipse(x, 500, rx - 14, ry - 14, 0, PI * 1.05, PI * 1.95); stitch(c, 'rgba(255,255,255,.55)', 2.5); }
+  /* a crayon, as long as the ship, dropped on the set */
+  shadow(c, 1250, 812, 270, 16, .2); c.save(); c.translate(1230, 790); c.rotate(.03); c.scale(.85, .85);
+  c.beginPath(); c.roundRect(-300, -34, 520, 68, 10); fill(c, '#3c6be0');
+  c.beginPath(); c.rect(-200, -34, 300, 68); fill(c, '#2f56c2'); c.fillStyle = 'rgba(255,255,255,.85)'; c.fillRect(-150, -18, 200, 36);
+  c.fillStyle = '#2f56c2'; c.font = '700 26px Inter, sans-serif'; c.fillText('SKY BLUE', -120, 9);
+  poly(c, [[220, -34], [300, -8], [300, 8], [220, 34]]); fill(c, '#5a86f0');
+  c.restore();
+  pegTree(c, 230, 640, 1, '#4f9a5c', felt, wood); pegTree(c, 1420, 650, 1.15, '#3f8a52', felt, wood); pegTree(c, 1300, 610, .8, '#6cb56b', felt, wood);
+  /* the ship: a painted wooden toy rocket on its side, a wind-up key, cotton-wool smoke */
+  shadow(c, 1030, 700, 300, 30, .2);
+  c.save(); c.translate(1020, 610); c.rotate(-.14);
+  for (const s of [-1, 1]){ poly(c, [[-200, s * 60], [-270, s * 120], [-170, s * 70]]); stuff(c, '#e8513d', wood, .6); }
+  c.beginPath(); c.roundRect(-240, -80, 420, 160, 80); stuff(c, '#f4ede0', wood, .7);
+  c.beginPath(); c.moveTo(150, -76); c.quadraticCurveTo(300, -40, 310, 0); c.quadraticCurveTo(300, 40, 150, 76); c.closePath(); stuff(c, '#e8513d', wood, .6);
+  c.fillStyle = '#2d6fd6'; c.fillRect(-150, -80, 46, 160);
+  for (const x of [-30, 60]){ circle(c, x, -10, 30); fill(c, '#ffffff'); circle(c, x, -10, 22); fill(c, '#8fd3ff'); c.fillStyle = 'rgba(255,255,255,.7)'; circle(c, x - 7, -17, 7); c.fill(); }
+  /* the key */
+  c.fillStyle = '#d9a83a'; c.fillRect(-20, -118, 14, 40);
+  for (const s of [-1, 1]){ oval(c, -13 + s * 26, -132, 26, 16); c.lineWidth = 10; c.strokeStyle = '#d9a83a'; c.stroke(); }
+  c.restore();
+  cottonPuff(c, 830, 540, 1); cottonPuff(c, 800, 450, 1.25); cottonPuff(c, 780, 340, 1.55);
+  setStyle({});
+  kids(c, [260, 440, 620], 760, 270, ['wave', 'stand', 'cheer'], { costume: 'space' });
+  label(c, 'A · Playset - LKP crash site');
+}
+function balloonA(c, x, y, r, col, felt){
+  c.strokeStyle = 'rgba(80,60,40,.55)'; c.lineWidth = 2; c.beginPath(); c.moveTo(x, y + r * 1.2); c.quadraticCurveTo(x + 20, y + r * 2.2, x - 10, y + r * 3.4); c.stroke();
+  oval(c, x, y, r, r * 1.2); stuff(c, col, felt);
+  for (const k of [-.45, .45]){ c.beginPath(); c.ellipse(x, y, r * Math.abs(k) * 1.6, r * 1.15, 0, k < 0 ? PI * .5 : -PI * .5, k < 0 ? PI * 1.5 : PI * .5); stitch(c, 'rgba(255,255,255,.6)', 2.5); }
+  poly(c, [[x - 9, y + r * 1.25], [x + 9, y + r * 1.25], [x, y + r * 1.12]]); fill(c, mix(col, '#000000', .2));
+}
+function popA(c){
+  const { felt, wood } = playroom(c, '#a6d68c');
+  /* felt bunting */
+  const cols = ['#ff7aa8', '#ffd25a', '#5fc0b8', '#a98bff', '#ff9a55'];
+  c.strokeStyle = 'rgba(80,60,40,.6)'; c.lineWidth = 3; c.beginPath(); c.moveTo(0, 60); c.quadraticCurveTo(W / 2, 200, W, 60); c.stroke();
+  for (let i = 0; i < 14; i++){ const t = (i + .5) / 14, x = t * W, y = 60 + 280 * t * (1 - t); poly(c, [[x - 42, y], [x + 42, y], [x, y + 80]]); stuff(c, cols[i % 5], felt); poly(c, [[x - 32, y + 8], [x + 32, y + 8], [x, y + 66]]); stitch(c, 'rgba(255,255,255,.65)', 2); }
+  /* a cupcake as big as a hill, a toy block bigger than a kid */
+  c.save(); c.translate(1440, 600);
+  poly(c, [[-170, -150], [170, -150], [130, 60], [-130, 60]]); stuff(c, '#ff9cc0', felt);
+  c.strokeStyle = 'rgba(255,255,255,.5)'; c.lineWidth = 4; for (let k = -6; k <= 6; k++){ c.beginPath(); c.moveTo(k * 26, -150); c.lineTo(k * 20, 60); c.stroke(); }
+  c.beginPath(); for (const [dx, dy, r] of [[-120, -170, 70], [-40, -210, 90], [60, -200, 85], [130, -165, 60]]){ c.moveTo(dx + r, dy); c.arc(dx, dy, r, 0, PI * 2); } stuff(c, '#fff3e6', felt);
+  circle(c, 10, -300, 34); stuff(c, '#e8413d', felt);
+  c.restore();
+  c.save(); c.translate(170, 640); c.rotate(-.08);
+  c.beginPath(); c.rect(-110, -200, 220, 220); stuff(c, '#ffd25a', wood, 1);
+  c.lineWidth = 14; c.strokeStyle = '#e8a93a'; c.strokeRect(-96, -186, 192, 192);
+  c.fillStyle = '#2d6fd6'; c.font = '800 150px Inter, sans-serif'; c.textAlign = 'center'; c.fillText('A', 0, -30);
+  c.restore();
+  /* felt balloons; paper confetti */
+  for (const [x, y, r, col] of [[560, 260, 62, '#ffd25a'], [1010, 220, 70, '#5fc0b8'], [1230, 330, 52, '#ff7aa8'], [330, 330, 48, '#a98bff']]) balloonA(c, x, y, r, col, felt);
+  for (let i = 0; i < 70; i++){ c.fillStyle = cols[i % 5]; c.save(); c.translate(R() * W, 150 + R() * 380); c.rotate(R() * PI); c.fillRect(-6, -3, 12, 6); c.restore(); }
+  setStyle({});
+  kids(c, [440, 800, 1160], 850, 400, ['cheer', 'reach', 'cheer'], {}, KIDS, true);
+  label(c, 'A · Playset - Pop Party');
+}
+
+/* ================= B: Flat and mischievous ================= */
+const SOFT = KIDS.map(k => ({ ...k, color: mix(k.color, '#b8b2a4', .45) }));
+const flatStyle = () => setStyle({ outline: null, shade: 'flat', feature: '#3b3a36' });
+function flatTree(c, x, y, r){ oval(c, x + r * .5, y + r * .2, r * 1.1, r * .35); fill(c, '#93a97c'); c.fillStyle = '#8a7a64'; c.fillRect(x - 6, y - r * .9, 12, r * .9); circle(c, x, y - r * 1.4, r); fill(c, '#6f8f61'); }
+function crashB(c){
+  c.fillStyle = '#eee9db'; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#a9bf8e'; c.fillRect(0, 430, W, H - 430);
+  c.beginPath(); c.moveTo(0, 440); for (let x = 0; x <= W; x += 120) c.arc(x + 60, 440, 62, PI, 0); c.lineTo(W, 470); c.lineTo(0, 470); fill(c, '#8aa577');
+  circle(c, 1280, 170, 58); fill(c, '#d9dccb'); oval(c, 1280, 170, 100, 18, -.25); c.lineWidth = 8; c.strokeStyle = '#e6c9a8'; c.stroke();
+  flatTree(c, 180, 560, 70); flatTree(c, 1470, 600, 80); flatTree(c, 1340, 520, 50);
+  /* the ship: one flat shape, one stripe, its flat shadow */
+  oval(c, 1060, 690, 310, 34); fill(c, '#93ab7c');
+  c.save(); c.translate(1030, 600); c.rotate(-.12);
+  c.beginPath(); c.roundRect(-250, -75, 470, 150, 75); fill(c, '#f3f0e8');
+  c.fillStyle = '#d98a5b'; c.fillRect(-140, -75, 40, 150);
+  circle(c, 20, -5, 26); fill(c, '#9db7c2');
+  c.restore();
+  for (const [x, y, r] of [[790, 520, 30], [760, 450, 40], [740, 360, 52]]){ circle(c, x, y, r); fill(c, '#d7d2c6'); }
+  flatStyle();
+  kids(c, [330, 500, 670], 740, 240, ['wave', 'stand', 'cheer'], { costume: 'space' }, SOFT);
+  label(c, 'B · Flat and mischievous - LKP crash site');
+}
+function popB(c){
+  c.fillStyle = '#efe9da'; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#b3c79a'; c.fillRect(0, 640, W, H - 640);
+  c.beginPath(); c.moveTo(0, 650); for (let x = 0; x <= W; x += 160) c.arc(x + 80, 650, 82, PI, 0); c.lineTo(W, 680); c.lineTo(0, 680); fill(c, '#9db586');
+  for (const [x, y, r, col] of [[600, 250, 46, '#e6b85c'], [1030, 200, 52, '#7fb0a8'], [1260, 320, 40, '#d98a8a']]){
+    c.strokeStyle = '#8a8478'; c.lineWidth = 2; c.beginPath(); c.moveTo(x, y + r * 1.15); c.lineTo(x - 6, y + r * 3.2); c.stroke();
+    oval(c, x, y, r, r * 1.15); fill(c, col); poly(c, [[x - 7, y + r * 1.22], [x + 7, y + r * 1.22], [x, y + r * 1.1]]); fill(c, col);
+  }
+  flatStyle();
+  kids(c, [440, 800, 1160], 850, 380, ['cheer', 'reach', 'cheer'], {}, SOFT);
+  const u = 380 / 300; SOFT.forEach((k, i) => { for (const [hx, hy] of HANDS[['cheer', 'reach', 'cheer'][i]]){ circle(c, [440, 800, 1160][i] + hx * u, 850 + hy * u, 22); fill(c, mix(k.color, '#ffffff', .35)); } });
+  label(c, 'B · Flat and mischievous - Pop Party');
+}
+
+/* ================= C: Bold and silly ================= */
+function burst(c, x, y, a, b, n = 24){ for (let i = 0; i < n; i++){ c.beginPath(); c.moveTo(x, y); c.arc(x, y, 2400, i * PI * 2 / n, (i + 1) * PI * 2 / n); c.closePath(); fill(c, i % 2 ? a : b); } }
+function facets(c, y0, y1, cols){
+  const xs = []; for (let x = -100; x <= W + 100; x += 140) xs.push([x, y0 + R() * (y1 - y0) * .5]);
+  for (let i = 0; i < xs.length - 1; i++){ poly(c, [xs[i], xs[i + 1], [xs[i + 1][0], y1 + 100], [xs[i][0], y1 + 100]]); fill(c, cols[i % cols.length]); poly(c, [xs[i], xs[i + 1], [(xs[i][0] + xs[i + 1][0]) / 2, y1]]); fill(c, mix(cols[i % cols.length], '#ffffff', .2)); }
+}
+function block(c, x, y, s, top, side, front){
+  poly(c, [[x - s, y - s], [x - s * .6, y - s * 1.4], [x + s * 1.4, y - s * 1.4], [x + s, y - s]]); fill(c, top);
+  poly(c, [[x + s, y - s], [x + s * 1.4, y - s * 1.4], [x + s * 1.4, y + s * .6], [x + s, y + s]]); fill(c, side);
+  c.fillStyle = front; c.fillRect(x - s, y - s, s * 2, s * 2);
+}
+function duck(c, x, y, s){
+  oval(c, x, y, 150 * s, 100 * s); fill(c, '#ffd400'); circle(c, x + 90 * s, y - 110 * s, 75 * s); fill(c, '#ffd400');
+  poly(c, [[x + 150 * s, y - 120 * s], [x + 230 * s, y - 100 * s], [x + 150 * s, y - 85 * s]]); fill(c, '#ff7a00');
+  circle(c, x + 110 * s, y - 130 * s, 12 * s); fill(c, '#1f1a3a'); oval(c, x - 20 * s, y - 20 * s, 70 * s, 40 * s, -.3); fill(c, '#ffe55c');
+}
+function crashC(c){
+  burst(c, 1250, 140, '#36b6ff', '#62ccff');
+  for (const [r, col] of [[520, '#ff3b6b'], [490, '#ff9f1c'], [460, '#ffe14d'], [430, '#5be05b'], [400, '#3a8bff']]){ c.beginPath(); c.arc(420, 560, r, PI, PI * 2); c.lineWidth = 32; c.strokeStyle = col; c.stroke(); }
+  c.fillStyle = '#38d16a'; c.fillRect(0, 600, W, H - 600);
+  for (let k = 0; k < 9; k++){ c.fillStyle = k % 2 ? '#2fc05c' : '#45dd78'; c.fillRect(0, 620 + k * 32, W, 16); }
+  facets(c, 380, 520, ['#7be04b', '#5ccd3a', '#a6f05a', '#4cc23a']);
+  duck(c, 1380, 420, 1.1);
+  for (const [x, y, s] of [[200, 650, 40], [1500, 700, 50], [1250, 620, 32]]){ c.fillStyle = '#8b5a2b'; c.fillRect(x - 8, y, 16, 60); block(c, x, y - s * .2, s, '#7dff6a', '#1f9e3a', '#2fd04a'); }
+  /* the ship, loud */
+  c.save(); c.translate(1000, 620); c.rotate(-.16);
+  for (const s of [-1, 1]){ poly(c, [[-180, s * 60], [-280, s * 140], [-140, s * 70]]); fill(c, '#ffd400'); }
+  c.beginPath(); c.roundRect(-240, -85, 430, 170, 85); fill(c, '#ff3b3b');
+  for (const x of [-170, -90, -10, 70]){ c.fillStyle = '#ffd400'; c.fillRect(x, -85, 30, 170); }
+  poly(c, [[190, -80], [330, 0], [190, 80]]); fill(c, '#ffffff');
+  circle(c, 120, -10, 34); fill(c, '#00e1ff');
+  c.restore();
+  for (let i = 0; i < 14; i++){ const x = R() * W, y = R() * 330, s = 10 + R() * 18; poly(c, Array.from({ length: 10 }, (_, k) => { const a = -PI / 2 + k * PI / 5, r = k % 2 ? s * .45 : s; return [x + Math.cos(a) * r, y + Math.sin(a) * r]; })); fill(c, '#fff35c'); }
+  for (const [x, y, r] of [[800, 500, 34], [770, 420, 46], [740, 320, 60]]){ circle(c, x, y, r); fill(c, '#ffffff'); }
+  setStyle({ width: 1.3 });
+  kids(c, [330, 520, 710], 760, 270, ['wave', 'stand', 'cheer'], { costume: 'space' });
+  label(c, 'C · Bold and silly - LKP crash site');
+}
+function popC(c){
+  burst(c, 800, 380, '#ff4fa3', '#ff86c2', 28);
+  /* a checkered floor */
+  for (let r = 0; r < 6; r++) for (let k = -12; k < 12; k++){ const y0 = 620 + r * r * 9 + r * 18, y1 = 620 + (r + 1) * (r + 1) * 9 + (r + 1) * 18, sc0 = 1 + r * .35, sc1 = 1 + (r + 1) * .35; poly(c, [[800 + k * 90 * sc0, y0], [800 + (k + 1) * 90 * sc0, y0], [800 + (k + 1) * 90 * sc1, y1], [800 + k * 90 * sc1, y1]]); fill(c, (r + k) % 2 ? '#ffe14d' : '#38d16a'); }
+  /* a donut the size of the sun */
+  circle(c, 1320, 170, 150); fill(c, '#e0a060'); circle(c, 1320, 170, 130); fill(c, '#7a3b1e'); circle(c, 1320, 170, 48); fill(c, '#e0a060'); circle(c, 1320, 170, 34); fill(c, '#ff86c2');
+  for (let i = 0; i < 26; i++){ const a = R() * PI * 2, d = 60 + R() * 60; c.save(); c.translate(1320 + Math.cos(a) * d, 170 + Math.sin(a) * d); c.rotate(R() * PI); c.fillStyle = ['#fff', '#3a8bff', '#ffe14d', '#5be05b'][i % 4]; c.fillRect(-10, -3, 20, 6); c.restore(); }
+  for (const [x, y, r, col] of [[560, 250, 90, '#ff9f1c'], [1000, 300, 80, '#00c2ff'], [260, 200, 70, '#9b5bff'], [1220, 470, 60, '#ff3b3b']]){
+    c.strokeStyle = '#1f1a3a'; c.lineWidth = 3; c.beginPath(); c.moveTo(x, y + r * 1.15); c.lineTo(x - 10, y + r * 3); c.stroke();
+    oval(c, x, y, r, r * 1.15); fill(c, col); oval(c, x - r * .35, y - r * .45, r * .2, r * .32, -.5); fill(c, 'rgba(255,255,255,.6)');
+  }
+  for (let i = 0; i < 160; i++){ c.fillStyle = ['#ffe14d', '#3a8bff', '#5be05b', '#ffffff', '#ff3b3b'][i % 5]; c.save(); c.translate(R() * W, R() * 640); c.rotate(R() * PI); c.fillRect(-7, -3, 14, 6); c.restore(); }
+  setStyle({ width: 1.3 });
+  kids(c, [440, 800, 1160], 850, 400, ['cheer', 'reach', 'cheer'], {}, KIDS, true);
+  label(c, 'C · Bold and silly - Pop Party');
+}
+
+crashA(ctx('a-crash')); popA(ctx('a-pop'));
+crashB(ctx('b-crash')); popB(ctx('b-pop'));
+crashC(ctx('c-crash')); popC(ctx('c-pop'));
+document.body.dataset.ready = '1';
+</script>
+</body></html>
