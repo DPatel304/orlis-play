@@ -10,6 +10,7 @@ import { button, onPick } from './cursor.js';
 import { screen, h, clearUI } from './screens.js';
 import { sfx } from '../audio/sound.js';
 import { account, AVATARS } from './account.js';
+import { openMaker, faceOf, withFace } from './avatar-maker.js';
 import { topBar } from './tabs.js';
 import { PAPER } from './boot.js';
 
@@ -101,7 +102,10 @@ export function familyPage({ nav = {}, onWho, onRecalibrate }){
     for (const a of mine.accounts){
       const p = firstOf.get(a.id);
       const me = a.id === account.state.account.id;
-      grown.appendChild(h('div', 'fchip', `<span class="av">${p ? AVATARS[p.avatar] || AVATARS.cube : AVATARS.cube}</span><span><b>${esc(p ? p.name : a.email)}${me ? ' (you)' : ''}</b><small>${esc(a.email)}</small></span>`));
+      const chip = withFace(h('div', 'fchip', `<span class="av">${p ? AVATARS[p.avatar] || AVATARS.cube : AVATARS.cube}</span><span><b>${esc(p ? p.name : a.email)}${me ? ' (you)' : ''}</b><small>${esc(a.email)}</small></span>`), p, 96);
+      /* (your own: a button for your avatar - grown-ups play too) */
+      if (me && p) chip.appendChild(btn(p.look ? 'Change my avatar' : 'Make my avatar', () => openMaker(p, { onDone: draw }), 'fsmall'));
+      grown.appendChild(chip);
     }
     const waiting = invites.invites.filter(i => !i.usedAt && i.kind === 'join');
     const invite = btn('Invite a grown-up', () => inviteCard(), 'go');
@@ -115,7 +119,7 @@ export function familyPage({ nav = {}, onWho, onRecalibrate }){
     const tiles = h('div', 'whotiles ftiles');
     for (const p of profiles){
       if (firstOf.get(p.accountId) === p) continue;      /* (a grown-up's own) */
-      tiles.appendChild(onPick(button(`<span class="av">${AVATARS[p.avatar] || AVATARS.cube}</span><span class="nm">${esc(p.name)}</span>`, 'who'), () => { sfx.select(); kidCard(p); }));
+      tiles.appendChild(withFace(onPick(button(`<span class="av">${AVATARS[p.avatar] || AVATARS.cube}</span><span class="nm">${esc(p.name)}</span>`, 'who'), () => { sfx.select(); kidCard(p); }), p, 220));
     }
     if (profiles.length < MAX) tiles.appendChild(onPick(button('<span class="av">+</span><span class="nm">Add a kid</span>', 'who add'), () => { sfx.select(); kidCard(null); }));
     body.appendChild(tiles);
@@ -125,13 +129,24 @@ export function familyPage({ nav = {}, onWho, onRecalibrate }){
   function kidCard(p){
     let pick = p ? p.avatar : 'rocket';
     const box = nameBox(p ? p.name : '');
-    const card = popup(h('h2', '', p ? esc(p.name) : 'Add a kid'), box, pictures(pick, (id) => { pick = id; }));
-    card.appendChild(h('p', 'fnote', 'Just a name and a picture - nothing else is kept about a child.'));
+    const card = popup(h('h2', '', p ? esc(p.name) : 'Add a kid'), box);
+    if (p && p.look){
+      /* they have an avatar: it, and a way to change it, instead of the old pictures */
+      const row = h('div', 'favrow'); row.append(faceOf(p, 140), btn('Change their avatar', () => { closePop(); openMaker(p, { onDone: draw }); }, 'go'));
+      card.appendChild(row);
+    } else {
+      card.appendChild(pictures(pick, (id) => { pick = id; }));
+      if (p) card.appendChild(btn('Make their avatar', () => { closePop(); openMaker(p, { onDone: draw }); }, 'go fsmall'));
+    }
+    card.appendChild(h('p', 'fnote', p ? 'Just a name and an avatar - nothing else is kept about a child.' : 'Just a name - next, they make their avatar. Nothing else is kept about a child.'));
     const go = async () => {
       const name = box.value.trim(); if (!name) return box.focus();
       try {
         if (p) await account.call('PATCH', `/api/profiles/${encodeURIComponent(p.id)}`, { name, avatar: pick });
-        else await account.call('POST', '/api/profiles', { name, avatar: pick });
+        else {
+          const made = await account.call('POST', '/api/profiles', { name, avatar: pick });
+          sfx.gold?.(); closePop(); draw(); openMaker(made, { onDone: draw }); return;
+        }
         sfx.gold?.(); closePop(); draw();
       } catch (e){ problem(card)(e); }
     };

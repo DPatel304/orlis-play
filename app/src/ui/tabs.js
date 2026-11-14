@@ -10,6 +10,7 @@ import { screen, h } from './screens.js';
 import { sfx } from '../audio/sound.js';
 import { mark } from './boot.js';
 import { account, AVATARS } from './account.js';
+import { withFace } from './avatar-maker.js';
 import { openSettings } from './menu.js';
 
 /* The corner menu's icons: simple line drawings, like the rest of the app's. */
@@ -59,7 +60,7 @@ export function topBar(page, nav, { onWho, onRecalibrate, isBusy = () => false }
      it goes back to "Who's playing?" */
   const who = account.current;
   if (who && onWho){
-    brand.appendChild(onPick(button(`<span class="av">${AVATARS[who.avatar] || AVATARS.cube}</span><span class="nm">${who.name.replace(/[&<>]/g, '')}</span>`, 'whochip'), () => { sfx.select(); onWho(); }));
+    brand.appendChild(withFace(onPick(button(`<span class="av">${AVATARS[who.avatar] || AVATARS.cube}</span><span class="nm">${who.name.replace(/[&<>]/g, '')}</span>`, 'whochip'), () => { sfx.select(); onWho(); }), who, 64));
   }
   const tabs = h('nav', 'tvtabs');
   /* (a child playing sees Home and the Store; Create is for grown-ups) */

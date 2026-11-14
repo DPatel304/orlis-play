@@ -12,6 +12,7 @@
 import { button, onPick } from './cursor.js';
 import { screen, h, clearUI } from './screens.js';
 import { sfx } from '../audio/sound.js';
+import { openMaker, withFace } from './avatar-maker.js';
 
 const KEY = 'orlis.account';
 export const AVATARS = {
@@ -218,9 +219,9 @@ export function welcome(done, { auto = true } = {}){
     auto = false;
     const tiles = h('div', 'whotiles');
     for (const p of account.state.profiles || []){
-      tiles.appendChild(onPick(button(`<span class="av">${AVATARS[p.avatar] || AVATARS.cube}</span><span class="nm">${esc(p.name)}</span>`, 'who'), () => {
+      tiles.appendChild(withFace(onPick(button(`<span class="av">${AVATARS[p.avatar] || AVATARS.cube}</span><span class="nm">${esc(p.name)}</span>`, 'who'), () => {
         sfx.select(); account.set({ current: p.id }); done(p);
-      }));
+      }), p, 220));
     }
     if ((account.state.profiles || []).length < 8) tiles.appendChild(onPick(button('<span class="av">+</span><span class="nm">Add a kid</span>', 'who add'), () => { sfx.select(); addKid(); }));
     show(h('h2', '', 'Who\'s playing?'), tiles, msg);
@@ -236,7 +237,8 @@ export function welcome(done, { auto = true } = {}){
     const f = form([['name', 'Their first name or a nickname', 'text']], 'Add', async ({ name }) => {
       const p = await account.call('POST', '/api/profiles', { name, avatar: pick });
       account.set({ profiles: [...(account.state.profiles || []), p] });
-      who();
+      /* straight on to making their avatar (Cancel keeps the picture) */
+      openMaker(p, { onDone: who }); who();
     });
     f.insertBefore(grid, f.lastChild);
     show(h('h2', '', 'Add a kid'), h('p', 'lede', 'Just a name and a picture - nothing else is needed.'), f, msg,
